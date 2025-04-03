@@ -1,24 +1,25 @@
 package controllers
 
 import (
+	"context"
+	"os"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sumukhj1219/fiber-go/config"
 	"github.com/sumukhj1219/fiber-go/models"
-	"github.com/sumukhj1219/fiber-go/utils"
 )
 
 func Register(c *fiber.Ctx) error {
+	ctx := context.Background()
 	var user models.User
+
 	if err := c.BodyParser(&user); err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Invalid input"})
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid input"})
 	}
 
-	hashedPassword, err := utils.HashPassword(user.Password)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Cannot hash password"})
-	}
-
-	_, err = config.DB.Exec("INSERT INTO users (username, email, password) VALUES ($1, $2, $3)", user.Username, user.Email, hashedPassword)
+	_, err := config.DB.Exec(ctx, "INSERT INTO users (username, email) VALUES ($1, $2)", user.Username, user.Email)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Cannot create user"})
 	}
@@ -27,20 +28,58 @@ func Register(c *fiber.Ctx) error {
 }
 
 func Login(c *fiber.Ctx) error {
-	var input models.User
-	if err := c.BodyParser(&input); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid Input"})
+	ctx := context.Background()
+	type Payload struct {
+		Email    string `json:"email"`
+		Username string `json:"username"`
+	}
+	var payload Payload
+
+	if err := c.BodyParser(&payload); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid input"})
 	}
 
 	var user models.User
-	err := config.DB.QueryRow("SELECT id, username, password, email FROM users WHERE email = $1", input.Email).Scan(&user.ID, &user.Username, &user.Password, &user.Email)
+	err := config.DB.QueryRow(ctx, "SELECT id, username, email FROM users WHERE email = $1", payload.Email).Scan(&user.ID, &user.Username, &user.Email)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid credentials"})
 	}
 
-	if err := utils.CheckPassword(user.Password, input.Password); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid credentials"})
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"userId":   user.ID,
+		"email":    user.Email,
+		"username": user.Username,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Could not generate token"})
 	}
 
-	token := jwt
+	cookieAuth := new(fiber.Cookie)
+	cookieAuth.Name = "token"
+	cookieAuth.Value = tokenString
+	cookieAuth.Expires = time.Now().Add(time.Hour * 24)
+	cookieAuth.MaxAge = 86400 // 1 day
+	cookieAuth.HTTPOnly = true
+	cookieAuth.Secure = false                          // Only `true` if using HTTPS
+	cookieAuth.SameSite = fiber.CookieSameSiteNoneMode // Important!
+
+	c.Cookie(cookieAuth)
+
+	return c.JSON(fiber.Map{"message": "Login successful"})
+}
+
+func Logout(c *fiber.Ctx) error {
+	c.Cookie(&fiber.Cookie{
+		Name:     "token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   false,
+		SameSite: fiber.CookieSameSiteNoneMode,
+	})
+
+	return c.JSON(fiber.Map{"message": "Logged out successfully"})
 }
