@@ -11,7 +11,7 @@ import (
 type Visit struct {
 	WebsiteId  string `json:"website_id"`
 	Url        string `json:"url"`
-	Referrer   string `json:"referrer"` // Fixed spelling
+	Referrer   string `json:"referrer"` 
 	UserAgent  string `json:"user_agent"`
 	ScreenSize string `json:"screen_size"`
 	TimeStamp  string `json:"time_stamp"`

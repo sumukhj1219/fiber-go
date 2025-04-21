@@ -61,10 +61,10 @@ func Login(c *fiber.Ctx) error {
 	cookieAuth.Name = "token"
 	cookieAuth.Value = tokenString
 	cookieAuth.Expires = time.Now().Add(time.Hour * 24)
-	cookieAuth.MaxAge = 86400 // 1 day
+	cookieAuth.MaxAge = 86400
 	cookieAuth.HTTPOnly = true
-	cookieAuth.Secure = false                          // Only `true` if using HTTPS
-	cookieAuth.SameSite = fiber.CookieSameSiteNoneMode // Important!
+	cookieAuth.Secure = false
+	cookieAuth.SameSite = fiber.CookieSameSiteNoneMode
 
 	c.Cookie(cookieAuth)
 
